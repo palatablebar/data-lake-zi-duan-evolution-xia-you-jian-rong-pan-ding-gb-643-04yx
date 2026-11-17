@@ -9,6 +9,7 @@ FOOTNOTES = [
     "类型放宽指新类型能无损容纳旧类型的全部取值。",
     f"生效区间按 {config.WINDOW_SEMANTICS} 处理。",
     "账目差额应为 0；不为 0 说明判定漏项。",
+    "版本边界与页面、manifest.json、账目 CSV 是同一份；暂存补发不计入正式结果。",
 ]
 
 
@@ -46,7 +47,7 @@ def _md_table(header: list[str], rows: list[list[str]]) -> str:
     return "\n".join(lines)
 
 
-def render(run: dict) -> str:
+def render(run: dict, boundary: dict | None = None) -> str:
     ledger = run.get("ledger") or {}
     fields = ledger.get("fields") or {}
     refs = ledger.get("refs") or {}
@@ -141,6 +142,35 @@ def render(run: dict) -> str:
         "3. 版本切回上一版，生效区间端点保持半开。",
         "",
     ])
+    if boundary:
+        window = boundary.get("official_window") or {}
+        parts.extend([
+            "## 7 版本边界",
+            "",
+            _md_table(
+                ["项", "值"],
+                [["正式批次", boundary.get("official_run_id") or "—"],
+                 ["正式序号", boundary.get("official_version_seq", 0)],
+                 ["生效起点", window.get("from") or "—"],
+                 ["生效终点", window.get("to") or "开"],
+                 ["待转正批次", boundary.get("staged_batches", 0)],
+                 ["待转正行数", boundary.get("staged_rows", 0)],
+                 ["处理中批次", boundary.get("open_batches", 0)]],
+            ),
+            "",
+            f"{boundary.get('semantics', '')}[^5]。",
+            "",
+        ])
+        plan = boundary.get("recalc_plan") or []
+        if plan:
+            parts.append("重算顺序（深度升序，小的先算）：")
+            parts.append("")
+            parts.append(_md_table(
+                ["顺序", "节点", "类型", "深度"],
+                [[item["order"], item["name"], item["kind"], item["depth"]]
+                 for item in plan],
+            ))
+            parts.append("")
     for index, note in enumerate(FOOTNOTES, start=1):
         parts.append(f"[^{index}]: {note}")
     parts.append("")

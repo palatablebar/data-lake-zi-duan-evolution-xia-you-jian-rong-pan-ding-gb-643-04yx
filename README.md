@@ -10,7 +10,8 @@
 - 字段映射与别名 SQL；改名同时换类型的项不生成别名，单独列为冲突。
 - 影响面 = 引用身份解析后的反向闭包，附环、自引用、断链、单边登记。
 - 批次幂等：同一输入命中批次键不再新增行；基线落后的提交返回 409。
-- 迁移单 Markdown + 字段账、引用账、账目、运行清单四份导出。
+- 迟到补发：旧口径记录进暂存区不直写新分区，批次完整后显式转正才进正式结果；分片游标可续跑，重跑同一文件不重复累计，转正只追加新版本。
+- 迁移单 Markdown + 字段账、引用账、账目、运行清单四份导出；页面与下载件展示同一份版本边界。
 
 ## 模块
 
@@ -23,6 +24,7 @@
 | M5 影响面 | 闭包、环、断链、单边 | `GET /api/impact`、`/impact` |
 | M6 版本批次 | 跑批次、历史、陈旧拒绝 | `POST /api/runs`、`/batches` |
 | M7 迁移单 | 条款号、账目导出 | `GET /api/export/spec.md`、`/spec` |
+| M8 迟到补发 | 暂存、续跑、转正、版本边界 | `POST /api/backfill/batches`、`/backfill` |
 
 ## 核心规则
 
@@ -52,22 +54,23 @@ curl -s localhost:18202/api/health
 3. `/mapping` 字段映射：`order_no → order_code` 的别名 SQL，`channel → pay_channel` 的冲突。
 4. `/impact` 影响面：受影响节点 4 个、1 个环、1 个自引用、2 处断链、2 处单边。
 5. `/batches` 版本历史：四账并列；「陈旧提交」验证 409。
-6. `/spec` 迁移单：6 条破坏条款，导出 Markdown 与三份 CSV。
+6. `/backfill` 迟到补发：登记 2026-08 旧口径补发 → 分片处理看游标 → 转正追加序号 2，重算顺序按深度升序。
+7. `/spec` 迁移单：6 条破坏条款，导出 Markdown 与三份 CSV；第 7 节版本边界与 `/backfill`、manifest.json 一致。
 
 ## 页面
 
-`/`、`/types`、`/mapping`、`/impact`、`/batches`、`/spec`，另有 `/docs` 作为接口说明。
+`/`、`/types`、`/mapping`、`/impact`、`/batches`、`/backfill`、`/spec`，另有 `/docs` 作为接口说明。
 
 ## 目录
 
 ```text
 app/                入口、配置、原因码、清单、库、渲染
-app/modules/m1..m7/ 每个模块 handler + service + 三个纯规则/读写文件
-app/templates/      base + 6 页
+app/modules/m1..m8/ 每个模块 handler + service + 三个纯规则/读写文件
+app/templates/      base + 7 页
 app/static/         theme / layout / components + app / table / footnote
 docs/               DEPTH、DATA-DICTIONARY、RUNBOOK
-sample_data/        5 个样例，含一个 GB18030 + CRLF + 标记的脏件
-tests/              conftest、7 个模块测试、e2e、不变量、fixtures
+sample_data/        7 个样例，含一个 GB18030 + CRLF + 标记的脏件与两份旧口径补发
+tests/              conftest、8 个模块测试、e2e、不变量、fixtures
 ```
 
 ## 测试

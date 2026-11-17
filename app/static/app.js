@@ -31,6 +31,25 @@ const ACTIONS = {
     }
     return `比较完成 ${result.change}`;
   },
+
+  async 'backfill-create'() {
+    const batch = await request('/api/backfill/batches', {});
+    return batch.reused
+      ? `命中已有补发批次 ${batch.batch_id}`
+      : `新补发批次 ${batch.batch_id} 目标月 ${batch.target_month}`;
+  },
+
+  async 'backfill-process'(button) {
+    const batch = await request(`/api/backfill/batches/${button.dataset.batch}/process`, {});
+    return `处理到 文件 ${batch.cursor.file_index + 1} 行 ${batch.cursor.line}（${batch.status}）`;
+  },
+
+  async 'backfill-promote'(button) {
+    const result = await request(`/api/backfill/batches/${button.dataset.batch}/promote`, {});
+    return result.reused
+      ? `已转正过 ${result.run_id}`
+      : `转正为 ${result.run_id} 序号 ${result.version_seq}`;
+  },
 };
 
 async function request(url, body) {
@@ -72,7 +91,7 @@ document.addEventListener('click', async (event) => {
   try {
     const message = await handler(button);
     flash(target, message || '完成', false);
-    if (name === 'run') {
+    if (name === 'run' || name.startsWith('backfill-')) {
       setTimeout(() => window.location.reload(), 400);
     }
   } catch (error) {

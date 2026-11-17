@@ -11,7 +11,7 @@ import sqlite3
 import threading
 from pathlib import Path
 
-from app import config
+from app import config, errors
 
 _LOCK = threading.Lock()
 
@@ -56,6 +56,31 @@ CREATE TABLE IF NOT EXISTS kv (
     k TEXT PRIMARY KEY,
     v TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS backfill_batches (
+    batch_id        TEXT PRIMARY KEY,
+    batch_key       TEXT NOT NULL UNIQUE,
+    target_month    TEXT NOT NULL,
+    caliber         TEXT NOT NULL,
+    status          TEXT NOT NULL,
+    cursor_json     TEXT NOT NULL,
+    totals_json     TEXT NOT NULL,
+    plan_json       TEXT,
+    promoted_run_id TEXT,
+    created_at      TEXT NOT NULL,
+    updated_at      TEXT NOT NULL,
+    payload_json    TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS backfill_files (
+    batch_id     TEXT NOT NULL,
+    file_index   INTEGER NOT NULL,
+    file_name    TEXT NOT NULL,
+    file_sha256  TEXT NOT NULL,
+    rows_total   INTEGER NOT NULL,
+    rows_done    INTEGER NOT NULL,
+    rejected_rows INTEGER NOT NULL,
+    status       TEXT NOT NULL,
+    PRIMARY KEY (batch_id, file_index)
+);
 CREATE INDEX IF NOT EXISTS idx_quarantine_schema ON quarantine(schema_id);
 """
 
@@ -83,7 +108,8 @@ def reset() -> None:
     """测试与重建用：清空全部业务表。"""
     with _LOCK, _connect() as conn:
         conn.executescript(SCHEMA)
-        for table in ("snapshots", "runs", "quarantine", "kv"):
+        for table in ("snapshots", "runs", "quarantine", "kv",
+                      "backfill_batches", "backfill_files"):
             conn.execute(f"DELETE FROM {table}")
 
 
@@ -256,6 +282,143 @@ def list_windows() -> list[dict]:
             "SELECT run_id, effective_from, effective_to FROM runs ORDER BY version_seq"
         ).fetchall()
     return [dict(row) for row in rows]
+
+
+# ---------- 迟到补发 ----------
+
+def save_backfill_batch(batch: dict, files: list[dict]) -> None:
+    """登记批次与文件清单，一个事务落库；批次键冲突由调用方先查复用。"""
+    with _LOCK, _connect() as conn:
+        conn.execute(
+            """INSERT INTO backfill_batches (batch_id, batch_key, target_month, caliber,
+                   status, cursor_json, totals_json, plan_json, promoted_run_id,
+                   created_at, updated_at, payload_json)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (
+                batch["batch_id"], batch["batch_key"], batch["target_month"],
+                batch["caliber"], batch["status"], _dumps(batch["cursor"]),
+                _dumps(batch["totals"]), _dumps(batch.get("plan") or []),
+                batch.get("promoted_run_id"), batch["created_at"], batch["updated_at"],
+                _dumps(batch),
+            ),
+        )
+        conn.executemany(
+            """INSERT INTO backfill_files (batch_id, file_index, file_name, file_sha256,
+                   rows_total, rows_done, rejected_rows, status)
+               VALUES (?,?,?,?,?,?,?,?)""",
+            [
+                (
+                    batch["batch_id"], int(row["file_index"]), row["file_name"],
+                    row["file_sha256"], int(row["rows_total"]), int(row["rows_done"]),
+                    int(row["rejected_rows"]), row["status"],
+                )
+                for row in files
+            ],
+        )
+
+
+def _backfill_payload(row) -> dict | None:
+    return _loads(row["payload_json"]) if row else None
+
+
+def get_backfill_batch(batch_id: str) -> dict | None:
+    with _LOCK, _connect() as conn:
+        row = conn.execute(
+            "SELECT payload_json FROM backfill_batches WHERE batch_id=?", (batch_id,)
+        ).fetchone()
+    return _backfill_payload(row)
+
+
+def find_backfill_batch_by_key(batch_key: str) -> dict | None:
+    with _LOCK, _connect() as conn:
+        row = conn.execute(
+            "SELECT payload_json FROM backfill_batches WHERE batch_key=?", (batch_key,)
+        ).fetchone()
+    return _backfill_payload(row)
+
+
+def list_backfill_batches(limit: int = 50) -> list[dict]:
+    with _LOCK, _connect() as conn:
+        rows = conn.execute(
+            """SELECT payload_json FROM backfill_batches
+               ORDER BY created_at DESC, batch_id LIMIT ?""",
+            (limit,),
+        ).fetchall()
+    return [_loads(row["payload_json"]) for row in rows]
+
+
+def list_backfill_files(batch_id: str) -> list[dict]:
+    with _LOCK, _connect() as conn:
+        rows = conn.execute(
+            """SELECT file_index, file_name, file_sha256, rows_total, rows_done,
+                      rejected_rows, status
+               FROM backfill_files WHERE batch_id=? ORDER BY file_index""",
+            (batch_id,),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def apply_backfill_chunk(batch: dict, file_index: int, file_sha256: str,
+                         rows_done: int, rejected_rows: int, file_status: str) -> None:
+    """一个分片的落库：文件进度与批次游标/累计同事务提交。
+
+    中断发生在提交前则整段回滚，游标停在上一段边界，重跑不重复累计。
+    """
+    with _LOCK, _connect() as conn:
+        cur = conn.execute(
+            """UPDATE backfill_files SET rows_done=?, rejected_rows=?, status=?
+               WHERE batch_id=? AND file_index=? AND file_sha256=?""",
+            (
+                int(rows_done), int(rejected_rows), file_status,
+                batch["batch_id"], int(file_index), file_sha256,
+            ),
+        )
+        if cur.rowcount != 1:
+            raise errors.Conflict(
+                "补发文件状态与登记不符",
+                detail={"batch_id": batch["batch_id"], "file_index": file_index,
+                        "reason": "FILE_CHANGED"},
+            )
+        conn.execute(
+            """UPDATE backfill_batches SET status=?, cursor_json=?, totals_json=?,
+                   plan_json=?, updated_at=?, payload_json=? WHERE batch_id=?""",
+            (
+                batch["status"], _dumps(batch["cursor"]), _dumps(batch["totals"]),
+                _dumps(batch.get("plan") or []), batch["updated_at"], _dumps(batch),
+                batch["batch_id"],
+            ),
+        )
+
+
+def finalize_backfill_batch(batch: dict) -> None:
+    """open → staged：全部文件处理完，挂上重算顺序，进入待转正。"""
+    with _LOCK, _connect() as conn:
+        conn.execute(
+            """UPDATE backfill_batches SET status=?, plan_json=?, updated_at=?,
+                   payload_json=? WHERE batch_id=?""",
+            (
+                batch["status"], _dumps(batch.get("plan") or []), batch["updated_at"],
+                _dumps(batch), batch["batch_id"],
+            ),
+        )
+
+
+def mark_backfill_promoted(batch: dict) -> None:
+    """open/staged → promoted 的状态迁移；已被别人转正时报冲突而不是覆盖。"""
+    with _LOCK, _connect() as conn:
+        cur = conn.execute(
+            """UPDATE backfill_batches SET status=?, promoted_run_id=?, updated_at=?,
+                   payload_json=? WHERE batch_id=? AND status='staged'""",
+            (
+                batch["status"], batch["promoted_run_id"], batch["updated_at"],
+                _dumps(batch), batch["batch_id"],
+            ),
+        )
+        if cur.rowcount != 1:
+            raise errors.Conflict(
+                "补发批次状态已变化，请重新读取",
+                detail={"batch_id": batch["batch_id"], "reason": "BACKFILL_STATE"},
+            )
 
 
 # ---------- 键值 ----------

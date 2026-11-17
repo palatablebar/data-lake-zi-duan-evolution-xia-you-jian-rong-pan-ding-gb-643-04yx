@@ -95,6 +95,11 @@ WINDOW_SEMANTICS = "[start, end)"
 # 影响面最多展开层数，防止异常登记把页面拖死
 MAX_IMPACT_DEPTH = 8
 
+# 迟到补发：样例文件、单次处理调用推进的行数上限、目标月格式
+DEFAULT_BACKFILL_FILES = ["backfill_2026_08_a.json", "backfill_2026_08_b.json"]
+BACKFILL_CHUNK = 5
+BACKFILL_MONTH_RE = re.compile(r"^(?P<year>\d{4})-(?P<month>0[1-9]|1[0-2])$")
+
 
 def resolve_sample(name: str) -> Path:
     """把样例文件名限定在 sample_data/ 内，拒绝穿越与绝对路径。"""

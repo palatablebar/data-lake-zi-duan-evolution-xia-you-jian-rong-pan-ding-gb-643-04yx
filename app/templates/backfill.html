@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}迟到补发 · fieldmap{% endblock %}
+{% block body %}
+<section class="doc-section">
+  <h1>迟到补发</h1>
+  <p class="lede">正式版本 <span class="mono">{{ boundary.official_label or '—' }}</span>（序号 <span class="mono">{{ boundary.official_version_seq }}</span>）　待转正 <span class="mono">{{ boundary.staged_batches }}</span> 批 / <span class="mono">{{ boundary.staged_rows }}</span> 行　处理中 <span class="mono">{{ boundary.open_batches }}</span> 批</p>
+  <div class="actions">
+    <button type="button" data-action="backfill-create">登记样例补发批次</button>
+    <a class="btn ghost" href="/api/backfill/boundary">边界 JSON</a>
+    <span class="flash" data-flash></span>
+  </div>
+  <p class="lede">{{ boundary.semantics }}<sup class="fn">1</sup></p>
+</section>
+
+<section class="doc-section">
+  <h2><span class="clause">2</span>补发批次</h2>
+  {% if batches %}
+  <div class="wrap-scroll">
+    <table>
+      <caption>暂存区<sup class="fn">2</sup></caption>
+      <thead>
+        <tr>
+          <th>批次</th><th>目标月</th><th>口径</th><th>状态</th>
+          <th class="num">进度</th><th class="num">入账</th><th class="num">拒收</th>
+          <th class="num">金额累计</th><th>游标</th><th>转正批次</th><th>操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in batches %}
+        <tr>
+          <td class="name">{{ item.batch_id }}</td>
+          <td class="name">{{ item.target_month }}</td>
+          <td class="name">{{ item.caliber }}</td>
+          <td>{% if item.status == 'promoted' %}<span class="st st-ok">{{ item.status_label }}</span>{% elif item.status == 'staged' %}<span class="st st-warn">{{ item.status_label }}</span>{% else %}<span class="st">{{ item.status_label }}</span>{% endif %}</td>
+          <td class="num">{{ item.totals.rows_done }}/{{ item.totals.rows_total }}</td>
+          <td class="num">{{ item.totals.rows_applied }}</td>
+          <td class="num">{{ item.totals.rejected_rows }}</td>
+          <td class="num">{{ item.totals.amount_total }}</td>
+          <td class="name">文件 {{ item.cursor.file_index + 1 }} · 行 {{ item.cursor.line }}</td>
+          <td class="name">{{ item.promoted_run_id or '—' }}</td>
+          <td>
+            {% if item.status == 'open' %}
+            <button type="button" class="ghost" data-action="backfill-process" data-batch="{{ item.batch_id }}">处理一段</button>
+            {% elif item.status == 'staged' %}
+            <button type="button" class="ghost" data-action="backfill-promote" data-batch="{{ item.batch_id }}">转正</button>
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="empty">还没有补发批次。旧口径记录迟到时，先登记进暂存区。</p>
+  {% endif %}
+  {% set shown = batches | selectattr('totals.issues') | list %}
+  {% if shown %}
+  <table>
+    <caption>拒收行（每批最多留 20 条）</caption>
+    <thead><tr><th>批次</th><th>文件</th><th class="num">行号</th><th>原因</th><th>明细</th></tr></thead>
+    <tbody>
+      {% for batch in shown %}{% for issue in batch.totals.issues %}
+      <tr>
+        <td class="name">{{ batch.batch_id }}</td>
+        <td class="name">{{ issue.file }}</td>
+        <td class="num">{{ issue.seq }}</td>
+        <td class="reason"><span class="code">{{ issue.reason|reason }}</span></td>
+        <td>{{ issue.detail }}</td>
+      </tr>
+      {% endfor %}{% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+
+<section class="doc-section">
+  <h2><span class="clause">3</span>重算顺序</h2>
+  <p class="lede">转正后按深度升序重算下游，深度小的先算<sup class="fn">3</sup>。</p>
+  {% if boundary.recalc_plan %}
+  <table>
+    <thead><tr><th class="num">顺序</th><th>节点</th><th>类型</th><th class="num">深度</th><th>入口</th></tr></thead>
+    <tbody>
+      {% for row in boundary.recalc_plan %}
+      <tr>
+        <td class="num">{{ row.order }}</td>
+        <td class="name">{{ row.name }}</td>
+        <td>{{ row.kind }}</td>
+        <td class="num">{{ row.depth }}</td>
+        <td class="name">{{ row.via|via }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">当前没有需要重算的下游。</p>
+  {% endif %}
+</section>
+
+<section class="doc-section">
+  <h2><span class="clause">4</span>版本边界</h2>
+  <dl class="ledger">
+    <div><dt>正式批次</dt><dd>{{ boundary.official_run_id or '—' }}</dd></div>
+    <div><dt>正式序号</dt><dd>{{ boundary.official_version_seq }}</dd></div>
+    <div><dt>生效起点</dt><dd>{{ boundary.official_window.from|day if boundary.official_window else '—' }}</dd></div>
+    <div><dt>待转正批次</dt><dd>{{ boundary.staged_batches }}<span class="unit">批</span></dd></div>
+    <div><dt>待转正行数</dt><dd>{{ boundary.staged_rows }}<span class="unit">行</span></dd></div>
+    <div><dt>处理中批次</dt><dd>{{ boundary.open_batches }}<span class="unit">批</span></dd></div>
+    <div><dt>处理中已入账</dt><dd>{{ boundary.open_rows_done }}<span class="unit">行</span></dd></div>
+  </dl>
+  <p class="lede">页面与导出件（manifest.json、迁移单、账目 CSV）展示同一份边界<sup class="fn">4</sup>。</p>
+</section>
+
+<aside class="notes">
+  <ol class="footnotes">
+    <li>暂存与处理中的补发不计入正式结果，显式转正才进入。<a class="back" href="#main">↩</a></li>
+    <li>每段处理落库后游标才前进，中断从下一段继续；同一输入命中批次键复用原批次，不重复累计。<a class="back" href="#main">↩</a></li>
+    <li>重算顺序 = 影响面反向闭包按最短跳数升序，断链节点按直接受影响排在深度 1。<a class="back" href="#main">↩</a></li>
+    <li>转正只追加新版本，不改写已有正式批次；已转正批次再转正返回原结果。<a class="back" href="#main">↩</a></li>
+  </ol>
+</aside>
+{% endblock %}

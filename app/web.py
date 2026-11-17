@@ -23,6 +23,7 @@ NAV = [
     {"slug": "mapping", "href": "/mapping", "label": "字段映射"},
     {"slug": "impact", "href": "/impact", "label": "影响面"},
     {"slug": "batches", "href": "/batches", "label": "版本历史"},
+    {"slug": "backfill", "href": "/backfill", "label": "迟到补发"},
     {"slug": "spec", "href": "/spec", "label": "迁移单"},
 ]
 
@@ -82,6 +83,8 @@ templates.env.filters["via"] = _via
 
 
 def shell_context(active: str) -> dict:
+    from app.modules.m8_backfill import boundary as boundary_mod
+
     run = store.latest_run()
     created = (run or {}).get("created_at")
     return {
@@ -95,6 +98,7 @@ def shell_context(active: str) -> dict:
         "tz_label": "+08:00",
         "window_semantics": config.WINDOW_SEMANTICS,
         "run": run,
+        "boundary": boundary_mod.current(),
     }
 
 

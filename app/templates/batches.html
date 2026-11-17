@@ -3,7 +3,7 @@
 {% block body %}
 <section class="doc-section">
   <h1>版本历史</h1>
-  <p class="lede">批次 <span class="mono">{{ runs|length }}</span>　当前序号 <span class="mono">{{ current_seq }}</span></p>
+  <p class="lede">批次 <span class="mono">{{ runs|length }}</span>　当前序号 <span class="mono">{{ current_seq }}</span>　待转正补发 <span class="mono">{{ boundary.staged_batches }}</span> 批</p>
   <div class="actions">
     <button type="button" data-action="run">跑一次</button>
     <button type="button" class="ghost" data-action="run" data-force-stale="1">陈旧提交</button>

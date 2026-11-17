@@ -48,6 +48,12 @@ class Conflict(FieldmapError):
     label = "记录冲突"
 
 
+class BackfillNotReady(FieldmapError):
+    status = 409
+    code = "BACKFILL_NOT_READY"
+    label = "补发批次未完整"
+
+
 def install(app: FastAPI) -> None:
     @app.exception_handler(FieldmapError)
     async def _handle_domain(_: Request, exc: FieldmapError) -> JSONResponse:

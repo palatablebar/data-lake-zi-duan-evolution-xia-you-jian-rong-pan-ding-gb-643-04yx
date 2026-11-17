@@ -1,0 +1,10 @@
+{
+  "caliber": "v2026_06",
+  "month": "2026-08",
+  "records": [
+    {"seq": 1, "table": "fct_pay", "day": "2026-08-04", "metric": "pay_amt", "amount": "66.40"},
+    {"seq": 2, "table": "dim_order", "day": "2026-08-04", "metric": "order_amt", "amount": "120.00"},
+    {"seq": 3, "table": "fct_pay", "day": "2026-08-05", "metric": "pay_amt", "amount": "75.10"},
+    {"seq": 4, "table": "dim_user", "day": "2026-08-05", "metric": "user_cnt", "amount": "2"}
+  ]
+}

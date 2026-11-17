@@ -62,7 +62,7 @@ def refs_csv(run: dict) -> str:
     return buffer.getvalue()
 
 
-def ledger_csv(ledger: dict) -> str:
+def ledger_csv(ledger: dict, boundary: dict | None = None) -> str:
     buffer, writer = _buffer()
     writer.writerow(["item", "value"])
     buckets = ledger.get("buckets") or {}
@@ -73,6 +73,11 @@ def ledger_csv(ledger: dict) -> str:
     refs = ledger.get("refs") or {}
     for name in ("refs_total", "reachable", "broken", "aliased"):
         writer.writerow([name, refs.get(name, 0)])
+    if boundary:
+        writer.writerow(["official_version_seq", boundary.get("official_version_seq", 0)])
+        writer.writerow(["staged_batches", boundary.get("staged_batches", 0)])
+        writer.writerow(["staged_rows", boundary.get("staged_rows", 0)])
+        writer.writerow(["open_batches", boundary.get("open_batches", 0)])
     return buffer.getvalue()
 
 

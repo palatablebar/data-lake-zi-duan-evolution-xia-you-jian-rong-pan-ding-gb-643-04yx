@@ -49,6 +49,15 @@ CODES: dict[str, tuple[str, str]] = {
     "VERSION_APPLIED": ("版本已登记", "info"),
     "RUN_REUSED": ("同一输入命中已算批次", "info"),
     "WINDOW_INVERTED": ("生效区间起点不早于终点", "break"),
+    # 迟到补发
+    "BACKFILL_STAGED": ("补发批次已完整暂存", "info"),
+    "BACKFILL_PROMOTED": ("补发批次已转正进正式结果", "info"),
+    "BACKFILL_REUSED": ("同一补发输入命中已有批次", "info"),
+    "BACKFILL_NOT_READY": ("补发批次未完整，不能转正", "break"),
+    "CALIBER_MISMATCH": ("补发文件口径与登记口径不符", "break"),
+    "MONTH_MISMATCH": ("补发记录月份不在目标月", "warn"),
+    "MONTH_NOT_LATE": ("目标月份不在正式生效起点之前", "break"),
+    "FILE_CHANGED": ("补发文件内容与登记摘要不符", "break"),
     # 结论
     "COMPATIBLE": ("兼容", "info"),
     "COMPATIBLE_BY_MAPPING": ("加别名后兼容", "warn"),

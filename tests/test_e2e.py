@@ -14,6 +14,7 @@ PAGES = [
     ("/mapping", "字段映射"),
     ("/impact", "影响面"),
     ("/batches", "版本历史"),
+    ("/backfill", "迟到补发"),
     ("/spec", "迁移单"),
 ]
 

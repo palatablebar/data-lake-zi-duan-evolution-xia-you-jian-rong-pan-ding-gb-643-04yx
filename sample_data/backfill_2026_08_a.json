@@ -1,0 +1,12 @@
+{
+  "caliber": "v2026_06",
+  "month": "2026-08",
+  "records": [
+    {"seq": 1, "table": "fct_pay", "day": "2026-08-01", "metric": "pay_amt", "amount": "102.50"},
+    {"seq": 2, "table": "fct_pay", "day": "2026-08-01", "metric": "pay_amt", "amount": "88.00"},
+    {"seq": 3, "table": "dim_order", "day": "2026-08-02", "metric": "order_amt", "amount": "240.75"},
+    {"seq": 4, "table": "fct_pay", "day": "2026-08-03", "metric": "pay_amt", "amount": "19.25"},
+    {"seq": 5, "table": "dim_user", "day": "2026-08-03", "metric": "user_cnt", "amount": "3"},
+    {"seq": 6, "table": "fct_pay", "day": "2026-07-31", "metric": "pay_amt", "amount": "50.00"}
+  ]
+}

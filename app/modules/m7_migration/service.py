@@ -1,12 +1,14 @@
 """迁移单编排：账目、迁移单、导出物。
 
 这里是对外的账目出口，判定细节不重复实现，只汇总本次运行的结果。
+版本边界取自 m8 的唯一出处，页面与下载件展示同一份。
 """
 
 from __future__ import annotations
 
 from app import manifest as manifest_mod, store
 from app.modules.m7_migration import csv_out, ledger, spec_md
+from app.modules.m8_backfill import boundary as boundary_mod
 
 
 def build_ledger(diff: dict, consumers: list[dict], resolution: dict) -> dict:
@@ -14,7 +16,7 @@ def build_ledger(diff: dict, consumers: list[dict], resolution: dict) -> dict:
 
 
 def spec_markdown(run: dict) -> str:
-    return spec_md.render(run)
+    return spec_md.render(run, boundary_mod.current())
 
 
 def clauses(run: dict) -> list[dict]:
@@ -30,7 +32,7 @@ def refs_csv_text(run: dict) -> str:
 
 
 def ledger_csv_text(run: dict) -> str:
-    return csv_out.ledger_csv(run.get("ledger") or {})
+    return csv_out.ledger_csv(run.get("ledger") or {}, boundary_mod.current())
 
 
 def manifest_json_text(run: dict) -> str:
@@ -42,6 +44,7 @@ def manifest_json_text(run: dict) -> str:
     payload["input_names"] = run.get("input_names") or {}
     payload["ledger"] = run.get("ledger") or {}
     payload["warnings"] = run.get("warnings") or []
+    payload["boundary"] = boundary_mod.current()
     return csv_out.manifest_json(payload)
 
 
